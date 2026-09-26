@@ -52,7 +52,7 @@ B580 is the development card, not the floor. Assume the NVIDIA has **less** VRAM
 
 - One frame in flight (latest-only queue; T11).
 - YOLOE and Depth Anything **sequential on the same frame** if both run.
-- Default adapter weights: **RUGD SegFormer-B5** OpenVINO IR (`rugd-segformer.xml`). YOLOE-26s stays on disk, not live.
+- Default adapter weights: **RUGD SegFormer-B5** OpenVINO IR (`rugd-segformer.xml`). YOLOE-26s stays on disk, not live. NVIDIA boxes use the same gitignored IRs (download locally; GitHub does not store `.xml`/`.bin`).
 - No extra GPU copies; no keeping RGB + mask + depth + two models resident if it blows the small card.
 - INT8 / extra compression is later, not a dummy-mask shortcut.
 

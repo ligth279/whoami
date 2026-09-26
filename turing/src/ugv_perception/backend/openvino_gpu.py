@@ -19,10 +19,10 @@ _MAX_DET = 300
 
 
 def _compile_gpu_then_cpu(core: object, model: object) -> tuple[object, str]:
-    """Prefer OpenVINO GPU. Intel CPU is the fallback. Compile is once, not per frame."""
+    """Prefer OpenVINO GPU (Intel Arc or NVIDIA plugin). CPU is last. Compile once."""
     devices = [str(d) for d in core.available_devices]
     names: list[str] = []
-    for prefix in (_DEVICE, _CPU):
+    for prefix in (_DEVICE, "NVIDIA", "CUDA", _CPU):
         for item in devices:
             if item.startswith(prefix) and item not in names:
                 names.append(item)
