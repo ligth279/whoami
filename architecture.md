@@ -29,7 +29,7 @@ Deliver an installable ROS 2 system that, on a differential-drive UGV with a cal
 |---|---|---|
 | **Brain** | Pose, map, planning, control *candidates* | RTAB-Map, Nav2 |
 | **Perception Port** | Canonical mask + port-normalized confidence + freshness | `/segmentation/mask` (+ meta) |
-| **Adapters** | Implement the port | YOLOE, tutorial ONNX, future seg |
+| **Adapters** | Implement the port | RUGD SegFormer (live), YOLOE (selectable), tutorial ONNX (eval) |
 | **Safety authority** | **Final** gate on what reaches the base | Priority mux / watchdog → `/cmd_vel` |
 
 ### 3.1 `/cmd_vel` authority (explicit)
@@ -76,7 +76,7 @@ Baylands / RUGD / tutorial ONNX = eval/scaffold only.
   ┌────────────────────┐                │
   │ Nav2 costmaps      │◄───────────────┘
   │ SemanticLayer +    │
-  │ optional VoxelLayer│◄── optional Depth Anything (geometry)
+  │ optional VoxelLayer│◄── optional Depth Anything 3 Metric Large (geometry)
   └─────────┬──────────┘
             ▼
   ┌────────────────────┐
@@ -92,14 +92,14 @@ Baylands / RUGD / tutorial ONNX = eval/scaffold only.
 ## 6. Tech stack
 | Layer | Choice | Notes |
 |---|---|---|
-| Middleware | ROS 2 Jazzy (Humble OK) | |
+| Middleware | ROS 2 Lyrical | |
 | Vision recommended / minimum | Stereo·RGB-D / mono | §10 |
 | **Brain** | RTAB-Map + Nav2 (Smac2D + RPP) | |
 | **Perception Port** | Canonical mask + conf + freshness + frame | §8 |
-| Adapter default outdoor | RUGD SegFormer-B5 | OpenVINO `device=GPU`. 25 RUGD classes remapped to {0,1,2}. YOLOE stays selectable, not live. |
-| Adapter scaffold | Tutorial ONNX | Remapped |
+| Adapter default outdoor | RUGD SegFormer-B5 | Intel: OpenVINO GPU, CPU fallback. NVIDIA: CUDA PyTorch (no OpenVINO). 25 RUGD classes remapped to {0,1,2}. YOLOE selectable, not live. |
+| Adapter scaffold | Tutorial ONNX | Eval only. Remapped |
 | **Safety authority** | Priority mux / watchdog | §3.1 · §12 |
-| Optional geometry | Depth Anything → VoxelLayer | Geometry side-channel only; conflict rules = §9 (geometry lethal wins; semantic never clears it) |
+| Optional geometry | Depth Anything 3 Metric Large → VoxelLayer | Geometry side-channel only; conflict rules = §9 (geometry lethal wins; semantic never clears it) |
 
 ## 7. Package layout
 ```
@@ -127,7 +127,7 @@ ugv_nav/
 **v1 drops `cautious`.** Ambiguous soft cases map to `unknown` (inflate) until a later revision promotes a fourth class. Brain/costmap bind **only** to these three IDs.
 
 ### 8.2 Adapter → canonical remapping (mandatory)
-Each adapter ships remap YAML (YOLOE prompts / ONNX sidewalk|grass|background → {0,1,2}). No remap → must not publish on the port.
+Each adapter ships remap YAML (RUGD SegFormer dirt|gravel|tree|… / YOLOE prompts / ONNX sidewalk|grass|background → {0,1,2}). No remap → must not publish on the port.
 
 ### 8.3 Confidence normalization (mandatory)
 Gates (τ_trav, τ_haz, τ_min, κ) apply in **port-normalized** `[0,1]` via per-adapter profiles. Raw multi-model scores are not shared.
@@ -154,7 +154,7 @@ Detailed projection math / multi-camera sync refinements = **deferred** (§14) i
 Stale or adapter failure → `/ugv/perception_degraded` + front ROI lethal/max-inflate + safety hold. Per-pixel gate miss is class `0` on that pixel, not a dropped mask. **Unknown ≠ free** (inflate `0`; never treat it as class `1`).
 
 ## 9. Semantic vs geometry precedence
-Optional Depth Anything → VoxelLayer is a **geometry side-channel**, not a second perception port.
+Optional Depth Anything 3 Metric Large → VoxelLayer is a **geometry side-channel**, not a second perception port.
 
 **Conflict rule:** if geometry says occupied/lethal and semantic says `traversable`, **geometry wins** (lethal stays). Semantic “safe” must **never** clear a geometric obstacle. Semantic hazards may add cost on top of free geometry.
 
