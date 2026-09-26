@@ -302,3 +302,23 @@ def test_openvino_gpu_run_on_ir() -> None:
         assert 0.0 <= inst.score <= 1.0
         assert inst.mask.dtype == np.bool_
         assert inst.mask.shape == (480, 640)
+        assert str(backend.device).startswith("GPU")
+
+
+def test_openvino_cpu_forced_run_without_product_picker() -> None:
+    """Force CPU compile+infer. Does not call the GPU-first product loader."""
+    import openvino as ov
+
+    root = Path(__file__).resolve().parents[3]
+    ir = root / "weights" / "yoloe-26s-seg.xml"
+    if not ir.is_file():
+        pytest.skip("YOLOE-26s IR missing")
+    core = ov.Core()
+    if not any(str(d).startswith("CPU") for d in core.available_devices):
+        pytest.skip("OpenVINO CPU device missing")
+    compiled = core.compile_model(core.read_model(str(ir)), "CPU")
+    blob = np.zeros((1, 3, 640, 640), dtype=np.float32)
+    result = compiled([blob])
+    tensors = [np.asarray(result[port]) for port in compiled.outputs]
+    assert len(tensors) >= 1
+    assert all(t.size > 0 for t in tensors)

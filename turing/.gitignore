@@ -15,3 +15,4 @@ weights/*.engine
 weights/*.safetensors
 weights/rugd-segformer/
 weights/ganav_drive/
+weights/da3metric-large/

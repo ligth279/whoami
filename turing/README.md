@@ -123,6 +123,8 @@ If a task cannot be tested without a fake camera, the task is not done — get a
 | [subarchs/subarch5.md](subarchs/subarch5.md) | T05 freshness/degraded-policy architecture (wins over the T05 checklist) |
 | [subarchs/subarch6.md](subarchs/subarch6.md) | T06 YOLOE adapter architecture (wins over the T06 checklist) |
 | [subarchs/subarch7.md](subarchs/subarch7.md) | T07 port-composition architecture (wins over the T07 checklist) |
+| [subarchs/subarch8.md](subarchs/subarch8.md) | T08 depth side-channel (DA3METRIC-LARGE; frozen; head-only export) |
+| [subarchs/subarch9.md](subarchs/subarch9.md) | T09 tutorial ONNX eval scaffold (not live; not frozen) |
 | [subarchs/subarch10.md](subarchs/subarch10.md) | T10 wired port-contract tests (wins over the T10 checklist; T08 still deferred) |
 | [subarchs/subarch11.md](subarchs/subarch11.md) | T11 latency / latest-only queue (wins over the T11 checklist; T08 still deferred) |
 | [subarchs/subarch12.md](subarchs/subarch12.md) | T12 OpenVINO GPU seam (matches shipped T06 Protocol; wins over old T12 checklist) |

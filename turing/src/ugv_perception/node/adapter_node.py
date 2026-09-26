@@ -64,6 +64,7 @@ class PerceptionAdapterNode(Node):
         now_ns_fn: object | None = None,
         queue_depth: object | None = None,
         adapter_id: str | None = None,
+        depth: object | None = None,
     ) -> None:
         if queue_depth is not None and (type(queue_depth) is not int or queue_depth != 1):
             raise TypeError("queue_depth must be Python int == 1")
@@ -80,8 +81,8 @@ class PerceptionAdapterNode(Node):
         self.declare_parameter("camera_info_topic", "/camera/camera_info")
         self.declare_parameter("queue_depth", 1)
         adapter_name = self.get_parameter("adapter").get_parameter_value().string_value
-        if adapter_name not in ("rugd", "yoloe"):
-            raise ValueError("adapter:=onnx is illegal until T09; live adapter is rugd")
+        if adapter_name not in ("rugd", "yoloe", "onnx"):
+            raise ValueError("adapter must be rugd, yoloe, or onnx; live default is rugd")
         raw_depth = (
             queue_depth
             if queue_depth is not None
@@ -123,6 +124,12 @@ class PerceptionAdapterNode(Node):
         self._pub_conf = self.create_publisher(Image, "/segmentation/confidence", 10)
         self._pub_meta = self.create_publisher(Float64MultiArray, "/segmentation/port_meta", 10)
         self._pub_cinfo = self.create_publisher(CameraInfo, "/segmentation/camera_info", 10)
+        self._depth = depth
+        self._pub_cloud = None
+        if depth is not None:
+            from sensor_msgs.msg import PointCloud2
+
+            self._pub_cloud = self.create_publisher(PointCloud2, "/perception/depth_cloud", 10)
         period_s = float(self._fresh.perception_max_age) / 2.0
         self._watchdog = threading.Thread(
             target=self._watchdog_loop,
@@ -187,8 +194,27 @@ class PerceptionAdapterNode(Node):
             self._pub_meta.publish(wired.port_meta)
             if self._last_camera_info_msg is not None:
                 self._pub_cinfo.publish(self._last_camera_info_msg)
+            self._publish_depth()
         if had_pair and self._last_image is not None:
             self._inferred_stamp = self._last_image.stamp_ns
+
+    def _publish_depth(self) -> None:
+        """After the mask. Failure publishes no cloud and does not touch degraded."""
+        if self._depth is None or self._last_image is None or self._last_info is None:
+            return
+        try:
+            from ugv_perception.ingest.decode import decode_frame
+            from ugv_perception.node.cloud import points_to_cloud
+
+            frame = decode_frame(self._last_image, self._last_info)
+            points = self._depth.points(frame.rgb, self._last_info.k)
+            if points is None or self._pub_cloud is None:
+                return
+            self._pub_cloud.publish(
+                points_to_cloud(points, frame.stamp_ns, frame.frame_id)
+            )
+        except Exception:
+            return
 
     def _watchdog_loop(self, period_s: float) -> None:
         max_age = float(self._fresh.perception_max_age)
@@ -209,11 +235,34 @@ class PerceptionAdapterNode(Node):
 
 
 def main() -> None:
+    from ugv_perception.backend.depth_live import build_depth_channel
     from ugv_perception.backend.rugd_live import build_live_adapter
 
-    adapter = build_live_adapter(_ROOT)
     rclpy.init()
-    node = PerceptionAdapterNode(adapter=adapter)
+    boot = rclpy.create_node("ugv_perception_boot")
+    boot.declare_parameter("adapter", "rugd")
+    selected = boot.get_parameter("adapter").get_parameter_value().string_value
+    boot.destroy_node()
+    if selected == "onnx":
+        from ugv_perception.backend.onnx_live import build_onnx_adapter
+
+        adapter = build_onnx_adapter(_ROOT)
+    elif selected == "yoloe":
+        from ugv_perception.adapter.prompts import load_prompts
+        from ugv_perception.adapter.yoloe import YoloeAdapter, load_adapter_config
+        from ugv_perception.backend.factory import build_backend
+
+        cfg = load_adapter_config(_ROOT / "config" / "adapters" / "yoloe.yaml")
+        prompts = load_prompts(
+            _ROOT / "config" / "perception" / "yoloe_prompts.yaml",
+            _ROOT / "config" / "ontologies" / "yoloe.yaml",
+        )
+        backend = build_backend(cfg["backend"], str(_ROOT / cfg["weights"]), prompts)
+        adapter = YoloeAdapter(backend, prompts)
+    else:
+        adapter = build_live_adapter(_ROOT)
+    depth = build_depth_channel(_ROOT)
+    node = PerceptionAdapterNode(adapter=adapter, depth=depth, adapter_id=selected)
     try:
         rclpy.spin(node)
     finally:
