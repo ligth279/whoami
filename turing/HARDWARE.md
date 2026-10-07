@@ -67,6 +67,7 @@ B580 is the development card, not the floor. Assume the NVIDIA has **less** VRAM
 - YOLOE and Depth Anything **sequential on the same frame** if both run.
 - Default adapter weights: **RUGD SegFormer-B5**. Intel: OpenVINO IR (`rugd-segformer.xml`) plus DA3 IR (`da3metric-large.xml`), GPU then CPU. NVIDIA: HuggingFace safetensors under `weights/rugd-segformer/` and `weights/da3metric-large/`, CUDA PyTorch, no OpenVINO. GitHub stores neither. YOLOE-26s stays on disk, not live.
 - No extra GPU copies; no keeping RGB + mask + depth + two models resident if it blows the small card.
+- Measured on this B580 with RUGD-B5 + DA3-Large both loaded: **1.72 GiB** GPU peak (`usm_device`). CPU-hide overlap did not grow it. Host RSS ~455 MiB. See [README.md](README.md#live-throughput-on-intel-arc-b580).
 - INT8 / extra compression is later, not a dummy-mask shortcut.
 
 ## ROS on this desktop (2026-09-18)

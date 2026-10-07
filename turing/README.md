@@ -53,6 +53,30 @@ bash scripts/fetch_da3metric_large.sh
 
 NVIDIA: HuggingFace download only (`weights/rugd-segformer/` and `weights/da3metric-large/`), plus PyTorch with CUDA. Skip the export. The node picks CUDA when OpenVINO reports no Intel `GPU`.
 
+## Live throughput on Intel Arc B580
+
+Measured on this desktop, `thetestimage1.jpg` **408×612**, RUGD SegFormer-B5 + DA3METRIC-LARGE, OpenVINO GPU, **plugin-default main-net compile**, FP32 IR. GPU preprocess and GPU decode stay f32. One frame in flight.
+
+**Original** = CPU resize / softmax / argmax. **GPU decode** = upsample → softmax → argmax on GPU. **GPU decode + preprocess** = that plus GPU resize + ImageNet. **+ multiprocess** = same GPU path, DA3 `maps()` on a worker while RUGD compose runs, then join for the same `stamp_ns` / `frame_id`.
+
+| Metric | Original | GPU decode | GPU decode + preprocess | + multiprocess | Orig. → decode | Orig. → pre | Pre → multi |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RUGD preprocess | ~56 ms | ~56 ms | **1.8 ms** | **1.8 ms** | 1.0× | **31.1×** | 1.0× |
+| RUGD inference | ~63 ms | ~57 ms | **~57 ms** | **~57 ms** | 1.1× | 1.1× | 1.0× |
+| RUGD decode | ~292 ms | **~41 ms** | **~41 ms** | **~41 ms** | **7.1×** | **7.1×** | 1.0× |
+| RUGD total (mask compose) | ~415 ms | ~98 ms | **61.2 ms** | **61.2 ms** | **4.23×** | **6.78×** | 1.0× |
+| RUGD FPS | ~2.4 | ~10.2 | **16.3** | **16.3** | **4.25×** | **6.8×** | 1.0× |
+| DA3 preprocess | ~21 ms | ~21 ms | **1.1 ms** | **1.1 ms** | 1.0× | **19.1×** | 1.0× |
+| DA3 total (`maps()`) | ~63.4 ms | ~63.4 ms | **28.5 ms** | **28.5 ms** | 1.0× | **2.22×** | 1.0× |
+| DA3 FPS | ~15.8 | ~15.8 | **35.1** | **35.1** | 1.0× | **2.22×** | 1.0× |
+| RUGD + DA3 live tick | **~465 ms / 2.15 FPS** | — | **87.8 ms / 11.4 FPS** | **76.0 ms / 13.2 FPS** | — | **5.3×** | **1.16×** |
+| Dual-resident GPU peak | — | — | **1.72 GiB** | **1.72 GiB** | — | — | 1.0× |
+| Host RSS (both nets) | — | — | **~455 MiB** | **~455 MiB** | — | — | 1.0× |
+
+Multiprocess does **not** run the two GPU nets at the same time on this Arc (OpenVINO still serializes those kernels). It hides DA3 CPU (hole-safe / remap) under RUGD GPU time. CUDA uses the same pool with a private stream per net; NVIDIA fps is unmeasured here.
+
+Do not compile the main nets with `INFERENCE_PRECISION_HINT=f32` or `LATENCY`: that dropped this box from ~16 FPS mask / ~11 FPS sequential to ~7 / ~3.6. Pre and post graphs stay f32.
+
 ### T07 port node (explicit)
 
 - Compose ingestion + RUGD SegFormer + remap + confidence + freshness
